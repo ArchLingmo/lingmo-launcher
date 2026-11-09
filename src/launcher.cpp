@@ -33,6 +33,8 @@
 #include <KX11Extras>
 #include <NETWM>
 
+#include <LayerShellQt/Window>
+
 Launcher::Launcher(bool firstShow, QQuickView *w)
     : QQuickView(w)
     , m_dockInterface("com.lingmo.Dock",
@@ -50,6 +52,20 @@ Launcher::Launcher(bool firstShow, QQuickView *w)
 
     setColor(Qt::transparent);
     setFlags(Qt::FramelessWindowHint);
+    if (KWindowSystem::isPlatformWayland()) {
+        // Wayland: over everything (bar and dock too) on the primary screen, the
+        // whole output, with the keyboard for the search field
+        m_layerShell = LayerShellQt::Window::get(this);
+        m_layerShell->setScope(QStringLiteral("lingmo-launcher"));
+        m_layerShell->setLayer(LayerShellQt::Window::LayerOverlay);
+        m_layerShell->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop
+                                                               | LayerShellQt::Window::AnchorBottom
+                                                               | LayerShellQt::Window::AnchorLeft
+                                                               | LayerShellQt::Window::AnchorRight));
+        m_layerShell->setExclusiveZone(-1);
+        m_layerShell->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
+        m_layerShell->setScreen(qApp->primaryScreen());
+    }
     setResizeMode(QQuickView::SizeRootObjectToView);
     onGeometryChanged();
 
@@ -112,6 +128,8 @@ void Launcher::showWindow()
     // KWin places a window again each time it's mapped: pin it to the primary screen
     const QRect primary = qApp->primaryScreen()->geometry();
     setScreen(qApp->primaryScreen());
+    if (m_layerShell)
+        m_layerShell->setScreen(qApp->primaryScreen()); // hidden now: taken at the next map
     setGeometry(primary);
     setVisible(true);
     setGeometry(primary);
@@ -199,7 +217,10 @@ void Launcher::onGeometryChanged()
 
 void Launcher::showEvent(QShowEvent *e)
 {
-    KX11Extras::setState(winId(), NET::SkipTaskbar | NET::SkipPager);
+    // X11 only (a layer surface is never in the taskbar, and KX11Extras would
+    // just warn on Wayland)
+    if (KWindowSystem::isPlatformX11())
+        KX11Extras::setState(winId(), NET::SkipTaskbar | NET::SkipPager);
 
     QQuickView::showEvent(e);
 }

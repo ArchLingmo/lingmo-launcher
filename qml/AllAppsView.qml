@@ -33,11 +33,16 @@ ListView {
     property var modelCount: sourceModel.count
 
     property int iconSize: root.iconSize + LingmoUI.Units.largeSpacing * 2
-    property int cellWidth: iconSize + calcExtraSpacing(iconSize, control.width)
-    property int cellHeight: iconSize + calcExtraSpacing(iconSize, control.height)
+    // Wayland: a calm grid like Launchpad, at most 7 x 5, cells spread over the area
+    readonly property int gridColumns: Math.max(4, Math.min(7, Math.floor(control.width / (root.gridIconSize * 1.9))))
+    readonly property int gridRows: Math.max(3, Math.min(5, Math.floor(control.height / (root.gridIconSize * 1.8))))
+    property int cellWidth: root.wayland ? Math.floor(control.width / gridColumns)
+                                         : iconSize + calcExtraSpacing(iconSize, control.width)
+    property int cellHeight: root.wayland ? Math.floor(control.height / gridRows)
+                                          : iconSize + calcExtraSpacing(iconSize, control.height)
 
-    property int rows: control.width / control.cellWidth
-    property int columns: control.height / control.cellHeight
+    property int rows: root.wayland ? gridColumns : control.width / control.cellWidth
+    property int columns: root.wayland ? gridRows : control.height / control.cellHeight
     property int pageCount: control.rows * control.columns
 
     orientation: ListView.Horizontal

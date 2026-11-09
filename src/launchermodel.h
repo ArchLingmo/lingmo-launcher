@@ -74,6 +74,7 @@ public:
     static void refresh(LauncherModel *manager);
 
     Q_INVOKABLE void move(int from, int to, int page, int pageCount);
+    Q_INVOKABLE void prewarmIcons(int pixelSize, bool shaped = false);
     Q_INVOKABLE void save();
 
     void delaySave();

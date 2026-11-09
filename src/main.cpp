@@ -58,7 +58,9 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("lingmo-launcher"));
 
-    QPixmapCache::setCacheLimit(2048);
+    // ~200 app icons at the grid size (76 px at 1080p: ~5 MB) must fit, or the
+    // prewarmed ones get evicted before the first open
+    QPixmapCache::setCacheLimit(16 * 1024);
 
     QCommandLineParser parser;
     QCommandLineOption showOption(QStringLiteral("show"), "Show Launcher");

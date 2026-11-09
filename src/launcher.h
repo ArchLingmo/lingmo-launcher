@@ -26,6 +26,10 @@
 
 #include <QDBusInterface>
 
+namespace LayerShellQt {
+class Window;
+}
+
 class Launcher : public QQuickView
 {
     Q_OBJECT
@@ -81,6 +85,8 @@ private:
     int m_leftMargin;
     int m_rightMargin;
     int m_bottomMargin;
+    // Wayland: the launcher's layer surface (null on X11)
+    LayerShellQt::Window *m_layerShell = nullptr;
 };
 
 #endif // LAUNCHER_H

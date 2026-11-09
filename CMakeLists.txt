@@ -13,6 +13,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(QT Core Widgets DBus Quick QuickControls2 LinguistTools)
 find_package(Qt6 REQUIRED ${QT})
 find_package(KF6WindowSystem REQUIRED)
+# Wayland: the launcher is a layer-shell overlay
+find_package(LayerShellQt REQUIRED)
 
 set(SRCS
     src/desktopproperties.cpp
@@ -50,6 +52,7 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Quick
         Qt6::QuickControls2
         KF6::WindowSystem
+        LayerShellQt::Interface
 )
 
 file(GLOB TS_FILES translations/*.ts)

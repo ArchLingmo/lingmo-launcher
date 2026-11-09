@@ -20,6 +20,7 @@
 #include "launchermodel.h"
 #include "desktopproperties.h"
 #include "processprovider.h"
+#include "iconitem.h"
 
 #include <QDBusInterface>
 #include <QDBusPendingCallWatcher>
@@ -33,6 +34,10 @@
 #include <QDirIterator>
 #include <QDebug>
 #include <QIcon>
+#include <QPointer>
+#include <functional>
+#include <memory>
+#include <QTimer>
 #include <QDir>
 #include <QSet>
 
@@ -472,4 +477,30 @@ void LauncherModel::removeApp(const QString &fileName)
     // Remove
     if (m_fileWatcher->files().contains(fileName))
         m_fileWatcher->removePath(fileName);
+}
+
+// Renders every app icon once at the grid's size, a few per event loop turn, so
+// the first open finds them in the pixmap cache instead of rasterising ~200 SVGs
+// in its first frame
+void LauncherModel::prewarmIcons(int pixelSize, bool shaped)
+{
+    if (pixelSize <= 0)
+        return;
+
+    QStringList names;
+    for (const AppItem &item : std::as_const(m_appItems))
+        names << item.iconName;
+
+    QPointer<LauncherModel> self(this);
+    auto step = std::make_shared<std::function<void(int)>>();
+    *step = [self, names, pixelSize, shaped, step](int from) {
+        if (!self)
+            return;
+        const int to = qMin(from + 8, names.size());
+        for (int i = from; i < to; ++i)
+            IconItem::themePixmap(names.at(i), pixelSize, shaped);
+        if (to < names.size())
+            QTimer::singleShot(0, self, [step, to] { (*step)(to); });
+    };
+    QTimer::singleShot(0, this, [step] { (*step)(0); });
 }

@@ -37,6 +37,12 @@ Item {
     property real verticalSpacing: launcher.screenRect.height * 0.01
     property real maxSpacing: horizontalSpacing > verticalSpacing ? horizontalSpacing : verticalSpacing
     property bool showed: launcher.showed
+    // Wayland: KWin blurs whatever is really behind (windows too) and animates the
+    // launcher in and out (lingmo_scale); X11 keeps its own blurred wallpaper copy
+    readonly property bool wayland: Qt.platform.pluginName.startsWith("wayland")
+    // Wayland: icon size from the screen height (84 px at 1080p, the tile inside
+    // ~74 px), the grid around it
+    readonly property int gridIconSize: Math.round(Math.max(60, Math.min(104, root.height * 0.078)))
     property int iconSize: root.height < 960 ? 96 : 128
 
     property alias uninstallDialog: _uninstallDialog
@@ -158,23 +164,31 @@ Item {
         id: backend
     }
 
+    LingmoUI.WindowBlur {
+        view: launcher
+        geometry: Qt.rect(0, 0, root.width, root.height)
+        windowRadius: 0
+        // Always on: switched off on hide it would vanish before KWin fades the launcher out
+        enabled: root.wayland
+    }
+
     Rectangle {
         anchors.fill: parent
         color: backend.color
-        visible: backend.type === 1
+        visible: backend.type === 1 && !root.wayland
     }
 
     Image {
         id: wallpaperImage
         anchors.fill: parent
-        source: "file://" + backend.path
+        source: root.wayland ? "" : "file://" + backend.path
         sourceSize: Qt.size(launcher.screenRect.width,
                             launcher.screenRect.height)
         fillMode: Image.PreserveAspectCrop
         asynchronous: false
         cache: false
         smooth: true
-        visible: backend.type === 0
+        visible: backend.type === 0 && !root.wayland
 
         onSourceChanged: launcher.clearPixmapCache()
     }
@@ -194,11 +208,38 @@ Item {
         source: parent
         color: "#000000"
         opacity: backend.dimsWallpaper ? 0.5 : 0.4
-        visible: true
+        visible: !root.wayland
+    }
+
+    // Wayland: a light veil over the blurred desktop, a little deeper at the top and
+    // bottom (search and page dots) so white text reads on any background
+    Rectangle {
+        id: _veil
+        anchors.fill: parent
+        visible: root.wayland
+        readonly property real base: backend.dimsWallpaper ? 0.32 : 0.22
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, _veil.base + 0.10) }
+            GradientStop { position: 0.35; color: Qt.rgba(0, 0, 0, _veil.base) }
+            GradientStop { position: 0.75; color: Qt.rgba(0, 0, 0, _veil.base) }
+            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, _veil.base + 0.12) }
+        }
     }
 
     LauncherModel {
         id: launcherModel
+    }
+
+    // Wayland: icons rendered ahead, so the first open after login doesn't stall
+    Timer {
+        interval: 3000
+        running: root.wayland
+        onTriggered: {
+            if (launcherModel.count === 0)
+                restart()
+            else
+                launcherModel.prewarmIcons(root.gridIconSize * Screen.devicePixelRatio, true)
+        }
     }
 
     Connections {
@@ -212,7 +253,7 @@ Item {
     ColumnLayout {
         id: mainLayout
         anchors.fill: parent
-        anchors.topMargin: 28
+        anchors.topMargin: root.wayland ? 44 : 28
         anchors.leftMargin: launcher.leftMargin
         anchors.rightMargin: launcher.rightMargin
         anchors.bottomMargin: launcher.bottomMargin + 28
@@ -221,7 +262,7 @@ Item {
         Item {
             id: searchItem
             Layout.fillWidth: true
-            height: fontMetrics.height + LingmoUI.Units.largeSpacing
+            height: root.wayland ? 34 : fontMetrics.height + LingmoUI.Units.largeSpacing
 
             TextMetrics {
                 id: fontMetrics
@@ -231,7 +272,8 @@ Item {
             TextField {
                 id: textField
                 anchors.centerIn: parent
-                width: searchItem.width * 0.2
+                // Wayland: a small floating pill, like Launchpad's
+                width: root.wayland ? Math.min(280, searchItem.width * 0.3) : searchItem.width * 0.2
                 height: parent.height
 
                 leftPadding: textField.activeFocus ? _placeImage.width + LingmoUI.Units.largeSpacing : LingmoUI.Units.largeSpacing
@@ -288,7 +330,7 @@ Item {
                 background: Rectangle {
                     id: _searchGlass
                     readonly property int level: LingmoUI.Theme.glassEffectiveLevel
-                    radius: textField.height * 0.2
+                    radius: root.wayland ? height / 2 : textField.height * 0.2
                     color: Qt.rgba(1, 1, 1, [0.20, 0.14, 0.18, 0.24][level])
                     border.width: level > 0 ? 1 : 0
                     border.color: LingmoUI.Theme.overlayBorderColor
@@ -330,7 +372,7 @@ Item {
         }
 
         Item {
-            height: 14
+            height: root.wayland ? 28 : 14
         }
 
         Item {
@@ -344,8 +386,8 @@ Item {
             AllAppsView {
                 id: appView
                 anchors.fill: parent
-                anchors.leftMargin: gridItem.width * 0.1
-                anchors.rightMargin: gridItem.width * 0.1
+                anchors.leftMargin: gridItem.width * (root.wayland ? 0.13 : 0.1)
+                anchors.rightMargin: gridItem.width * (root.wayland ? 0.13 : 0.1)
                 Layout.alignment: Qt.AlignHCenter
                 searchMode: textField.text
                 focus: true
@@ -391,10 +433,12 @@ Item {
             visible: appView.count > 1
 
             delegate: Rectangle {
-                width: 10
+                width: root.wayland ? 7 : 10
                 height: width
                 radius: width / 2
-                color: index === pageIndicator.currentIndex ? "white" : Qt.darker("white", 1.8)
+                color: !root.wayland ? (index === pageIndicator.currentIndex ? "white" : Qt.darker("white", 1.8))
+                                     : Qt.rgba(1, 1, 1, index === pageIndicator.currentIndex ? 0.95 : 0.35)
+                Behavior on color { ColorAnimation { duration: LingmoUI.Units.shortDuration } }
             }
         }
     }

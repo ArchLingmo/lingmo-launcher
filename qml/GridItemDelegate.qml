@@ -89,14 +89,23 @@ Item {
         id: icon
 
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.bottom: label.top
+        anchors.top: root.wayland ? undefined : parent.top
+        anchors.bottom: root.wayland ? undefined : label.top
         anchors.margins: LingmoUI.Units.largeSpacing * 2
 
-        width: height
-        height: width
+        // Wayland: one size for every icon, icon and name centred together in the cell
+        y: root.wayland ? Math.round((control.height - root.gridIconSize - 10 - fontMetrics.height) / 2) : 0
+        width: root.wayland ? root.gridIconSize : height
+        height: root.wayland ? root.gridIconSize : width
+
+        // Wayland: sinks a little under the finger instead of darkening
+        scale: root.wayland && iconMouseArea.pressed ? 0.9 : 1.0
+        Behavior on scale {
+            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
 
         source: model.iconName
+        shaped: root.wayland
         visible: !dragStarted
 
         ColorOverlay {
@@ -105,7 +114,7 @@ Item {
             source: icon
             color: "#000000"
             opacity: 0.5
-            visible: iconMouseArea.pressed
+            visible: iconMouseArea.pressed && !root.wayland
         }
     }
 
@@ -219,7 +228,9 @@ Item {
 
         anchors {
             horizontalCenter: parent.horizontalCenter
-            bottom: parent.bottom
+            bottom: root.wayland ? undefined : parent.bottom
+            top: root.wayland ? icon.bottom : undefined
+            topMargin: 10
             margins: LingmoUI.Units.smallSpacing
         }
 
@@ -228,12 +239,15 @@ Item {
         text: model.name
         elide: Text.ElideRight
         textFormat: Text.PlainText
-        maximumLineCount: 2
+        // Wayland: one line, with a soft shadow so it reads on light backgrounds too
+        maximumLineCount: root.wayland ? 1 : 2
+        style: root.wayland ? Text.Raised : Text.Normal
+        styleColor: Qt.rgba(0, 0, 0, 0.45)
         wrapMode: "WordWrap"
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignTop
         width: parent.width - 2 * LingmoUI.Units.smallSpacing
-        height: fontMetrics.height * 2
+        height: fontMetrics.height * (root.wayland ? 1 : 2)
         color: "white"
 
         MouseArea {
