@@ -34,6 +34,7 @@
 #include <QDebug>
 #include <QIcon>
 #include <QDir>
+#include <QSet>
 
 static QByteArray detectDesktopEnvironment()
 {
@@ -63,6 +64,11 @@ LauncherModel::LauncherModel(QObject *parent)
     QtConcurrent::run(LauncherModel::refresh, this);
 
     m_fileWatcher->addPath("/usr/share/applications");
+    // The user's own launchers too (~/.local/share/applications): apps in isolated boxes
+    // (lingmo-winrun) and phone apps pinned from Phone and devices (lingmo-share)
+    const QString userApps = QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
+    QDir().mkpath(userApps);
+    m_fileWatcher->addPath(userApps);
     connect(m_fileWatcher, &QFileSystemWatcher::fileChanged, this, &LauncherModel::onFileChanged);
     connect(m_fileWatcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
         QtConcurrent::run(LauncherModel::refresh, this);
@@ -237,12 +243,23 @@ void LauncherModel::refresh(LauncherModel *manager)
         settings.setValue("appDirectories", directories);
     }
 
+    // Always the user's own folder, first: as XDG says, a launcher there with the
+    // name of a system one replaces it (or hides it, with Hidden=true)
+    const QString userApps = QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
+    directories.removeAll(userApps);
+    directories.prepend(userApps);
+
+    QSet<QString> seenNames;
     for (const QString &dir : directories) {
         QDirIterator it(dir, { "*.desktop" }, QDir::NoFilter, QDirIterator::Subdirectories);
         while (it.hasNext()) {
             const auto fileName = it.next();
             if (!QFile::exists(fileName))
                 continue;
+            const QString name = QDir(dir).relativeFilePath(fileName);
+            if (seenNames.contains(name))
+                continue;
+            seenNames.insert(name);
 
             allEntries.append(fileName);
         }
